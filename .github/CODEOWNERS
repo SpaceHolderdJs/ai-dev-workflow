@@ -1,0 +1,6 @@
+# Changes to the rules the agent works under need the repo owner's review.
+/AGENTS.md            @SpaceHolderdJs
+/CLAUDE.md            @SpaceHolderdJs
+/.claude/             @SpaceHolderdJs
+/.github/             @SpaceHolderdJs
+/src/tenancy/         @SpaceHolderdJs
