@@ -3,8 +3,12 @@ coverage/
 reports/
 .stryker-tmp/
 *.tsbuildinfo
+temp_auto_push.bat
 .DS_Store
 
 # Real credentials never leave the machine that needs them.
 .env*.local
 secrets/
+.gitignore
+branch_structure.json
+config.bat
