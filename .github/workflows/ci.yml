@@ -1,0 +1,87 @@
+name: CI
+
+# The same gate as the lefthook hooks, run where nobody can skip it.
+# Every job is a required status check on main.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  static:
+    name: Static checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0 # commitlint needs the PR's commit range
+
+      - uses: ./.github/actions/setup-project
+        with:
+          node-version: 22.x
+
+      - name: Commit messages (whole PR range)
+        if: github.event_name == 'pull_request'
+        run: npx commitlint --from ${{ github.event.pull_request.base.sha }} --to ${{ github.event.pull_request.head.sha }} --verbose
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Type check
+        run: npm run check:types
+
+      - name: Unused files, exports and dependencies
+        run: npm run check:deps
+
+  test:
+    name: Tests + coverage
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+      - uses: ./.github/actions/setup-project
+        with:
+          node-version: 22.x
+      - run: npm run test:coverage # includes scripts/hooks.test.mjs (agent guard hook)
+
+  mutation:
+    name: Mutation tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - uses: ./.github/actions/setup-project
+        with:
+          node-version: 22.x
+      # The check that a green test suite can actually go red.
+      # Whole codebase: fails under 90% (stryker.config.json).
+      # Tenant boundary: fails on a single surviving mutant (stryker.boundary.json).
+      - run: npm run test:mutation
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mutation-report
+          path: reports/mutation/
+          retention-days: 7
+
+  secrets:
+    name: Secret scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

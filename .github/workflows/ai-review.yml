@@ -1,0 +1,67 @@
+name: AI review
+
+# A second reviewer on every PR: Claude Code reads the diff against this repo's
+# own rules (AGENTS.md, docs/CODE-RULES.md, docs/DEFINITION-OF-DONE.md) and
+# posts inline comments. It reviews; it never approves, pushes or merges.
+# A human still owns the merge. Mention @claude in a PR comment for a follow-up.
+
+on:
+  pull_request:
+    types: [opened, synchronize, ready_for_review, reopened]
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+  id-token: write
+
+jobs:
+  review:
+    if: |
+      (github.event_name == 'pull_request' && !github.event.pull_request.draft) ||
+      (github.event_name == 'issue_comment' && github.event.issue.pull_request && contains(github.event.comment.body, '@claude'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Skip cleanly when no API key is configured
+        id: key
+        env:
+          KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          if [ -z "$KEY" ]; then
+            echo "::notice::ANTHROPIC_API_KEY is not set - AI review skipped."
+            echo "present=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v5
+        if: steps.key.outputs.present == 'true'
+        with:
+          fetch-depth: 0
+
+      - uses: anthropics/claude-code-action@v1
+        if: steps.key.outputs.present == 'true'
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          track_progress: true
+          prompt: |
+            Review this pull request as a senior engineer on this repo.
+            Read AGENTS.md, docs/CODE-RULES.md and docs/DEFINITION-OF-DONE.md first;
+            they are the bar. Then review only the diff.
+
+            Prioritise, in this order:
+            1. Tenant-boundary changes (src/tenancy, scoping, claims) without a
+               negative test that would fail if the protection were removed.
+            2. Tests that cannot fail: asserting on an empty fixture, on length > 0,
+               or on a mock of the thing under test.
+            3. Claims in the PR description that the diff or CI does not support.
+            4. Correctness bugs, then rule violations the linters cannot see.
+
+            Skip style nits the linter already enforces. For each finding give the
+            file and line, what breaks and the input that breaks it. If nothing
+            is wrong, say so in one line - do not invent findings.
+          claude_args: |
+            --allowedTools "Read,Grep,Glob,Bash(git diff:*),Bash(git log:*),Bash(npm test),Bash(npm run lint),mcp__github_inline_comment__create_inline_comment"
