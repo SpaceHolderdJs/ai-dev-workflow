@@ -1,0 +1,29 @@
+# The fast local copy of the CI gate. Installed by `npm install` (prepare script).
+# Never bypass with --no-verify: skipping a hook only moves the failure to CI.
+
+commit-msg:
+  jobs:
+    - name: commitlint
+      run: npx --no -- commitlint --edit {1}
+
+pre-commit:
+  parallel: true
+  jobs:
+    - name: lint
+      run: npx --no -- eslint --fix --no-warn-ignored {staged_files}
+      glob: '*.{js,mjs,ts,json,md,yml,yaml}'
+      stage_fixed: true
+    - name: check-types
+      run: npm run check:types
+      glob: '*.{ts,mjs}'
+    - name: knip
+      run: npm run check:deps
+    - name: unit
+      run: npm test
+      glob: 'src/**/*.ts'
+
+pre-push:
+  jobs:
+    - name: mutation (tenant boundary)
+      run: npm run test:mutation:boundary
+      glob: 'src/tenancy/**'

@@ -1,0 +1,10 @@
+node_modules/
+coverage/
+reports/
+.stryker-tmp/
+*.tsbuildinfo
+.DS_Store
+
+# Real credentials never leave the machine that needs them.
+.env*.local
+secrets/
